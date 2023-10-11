@@ -6,6 +6,8 @@
 #include <sys/ipc.h>
 #include <sys/msg.h>
 
+//HELLO
+
 #define MAXDIRPATH 1024
 #define MAXKEYWORD 256
 #define MAXLINESIZE 1024
