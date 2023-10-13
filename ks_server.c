@@ -173,7 +173,7 @@ int main(void) {
   //     exit(1);
   // }
 
-  pthread_create(&tid, &attr, reader, message.content); //create a thread with the thread id, default attributes, do the reader routine, and with message contents
+  pthread_create(&tid, &attr, reader, message.keyword); //create a thread with the thread id, default attributes, do the reader routine, and with message contents
 
   return 0;
 }
