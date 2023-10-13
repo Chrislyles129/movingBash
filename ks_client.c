@@ -13,13 +13,17 @@
 
 struct message_s {
   long type;
-  char content[MAXKEYWORD];
+  char keyword[MAXKEYWORD];
+  char dirpath[MAXDIRPATH];
 };
+
+
+
 
 int main(int argc, char *argv[]) {
 
-    char *word = argv[1];
-    //char *file = argv[2];
+    char *keyword = argv[1];
+    char *dirpath= argv[2];
 
     struct message_s message;
     int message_queue_id;
@@ -36,10 +40,12 @@ int main(int argc, char *argv[]) {
     }
 
     message.type = 1;
-    strcpy(message.content, word);
+    strcpy(message.keyword, keyword);
+    strcpy(message.dirpath, dirpath);
+
     // printf("%s", message.content);
 
-    if(msgsnd(message_queue_id, &message, MAXKEYWORD, 0) == -1) {
+    if(msgsnd(message_queue_id, &message, MAXKEYWORD + MAXDIRPATH, 0) == -1) {
         perror("Error in msgsnd");
     }
 
