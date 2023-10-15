@@ -28,7 +28,15 @@ struct message_s {
   char dirpath[MAXDIRPATH];
 };
 
+struct threadParams{
+  FILE* file;
+  char *keyword;
+};
+
+//global count
 int count;
+//global files array to use as a queue
+FILE *files[];
 
 //READ FILES
 void readFile(char *File, char *keyword){
@@ -83,8 +91,6 @@ void readFile(char *File, char *keyword){
     //close and free
     fclose(ptr);
     free(line);
-
-
 }
 
 //READ DIRECTORY
@@ -104,7 +110,6 @@ void readFolder(char *dirpath, char *keyword){
       return; 
   } 
 
-  
   char *File = malloc(MAXDIRPATH);
 
   //readdir gets next directory entry
@@ -113,9 +118,10 @@ void readFolder(char *dirpath, char *keyword){
     if (strcmp(de->d_name, ".") == 0 || strcmp(de->d_name, "..") == 0) {
         continue;
     }
-    count++;
     // printf("%s\n", de->d_name); 
-
+    //fill the files array with the files, inc count
+    files[count] = File;
+    count++;
     //Get full file path
     sprintf(File, "%s%s", dirpath, de->d_name);
     printf("%s\n", File);
@@ -128,15 +134,19 @@ void readFolder(char *dirpath, char *keyword){
   closedir(dir);     
 } 
 
-void *reading(void *param){
-  //have it read the file
 
+void *reading(struct threadParams data){
+  //have it read the file
+  readFile(data.file, data.keyword);
+  
   //close the thread
   return NULL;
 }
 
+
 int main(void) {
   struct message_s message;
+  struct threadParams parameters; 
   int message_queue_id;
   key_t key;
   pid_t x;
@@ -165,6 +175,7 @@ int main(void) {
       perror("msgrcv");
       exit(1);
     }
+
     //create a child when a message is received
     x = fork();
     
@@ -172,8 +183,10 @@ int main(void) {
     if(x == 0){ //child
       for(int i = 0; i < count; i++){
         pthread_attr_init(&attr);
+        parameters.file = files[count];
+        parameters.keyword = message.keyword;
         //create a thread with the thread id, default attributes, do the reader routine, and with message contents
-        pthread_create(&tid, &attr, reading, message.keyword); 
+        pthread_create(&tid, &attr, reading, &parameters); 
         pthread_join(tid, NULL);
       }
     }
