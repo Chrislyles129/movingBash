@@ -28,6 +28,8 @@ struct message_s {
   char dirpath[MAXDIRPATH];
 };
 
+int count;
+
 //READ FILES
 void readFile(char *File, char *keyword){
 
@@ -94,7 +96,7 @@ void readFolder(char *dirpath, char *keyword){
   DIR *dir = opendir(dirpath); 
 
   //track viable files to open
-  int count = 0;
+  count = 0;
 
   //Validate directory
   if (dir == NULL){
@@ -126,11 +128,11 @@ void readFolder(char *dirpath, char *keyword){
   closedir(dir);     
 } 
 
+void *reading(void *param){
+  //have it read the file
 
-
-//the routine that the threads will be running
-void *reader(void *param){
-
+  //close the thread
+  return NULL;
 }
 
 int main(void) {
@@ -168,7 +170,12 @@ int main(void) {
     
     //create the threads in the child for amount of files in directory
     if(x == 0){ //child
-      
+      for(int i = 0; i < count; i++){
+        pthread_attr_init(&attr);
+        //create a thread with the thread id, default attributes, do the reader routine, and with message contents
+        pthread_create(&tid, &attr, reading, message.keyword); 
+        pthread_join(tid, NULL);
+      }
     }
     if(x > 0){ //this is the parent
       printf("This is the parent process");
@@ -186,7 +193,7 @@ int main(void) {
   //     exit(1);
   // }
 
-  pthread_create(&tid, &attr, reader, message.keyword); //create a thread with the thread id, default attributes, do the reader routine, and with message contents
+  
 
   return 0;
 }
