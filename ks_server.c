@@ -77,7 +77,7 @@ void readFile(char *File, char *keyword){
           //if word token matches keyword, print line
           if(strcmp(words, keyword) == 0){
               printf("%s:%s", keyword, line);
-              // printf("%s\n", line);
+              //printf("%s\n", line);
               break;
           }
 
@@ -125,7 +125,7 @@ void readFolder(char *dirpath, char *keyword){
     //Get full file path
     sprintf(File, "%s%s", dirpath, de->d_name);
     printf("%s\n", File);
-    readFile(File, keyword);
+    //readFile(File, keyword);
 
   }
   // printf("%d\n", count);
@@ -134,13 +134,13 @@ void readFolder(char *dirpath, char *keyword){
   closedir(dir);     
 } 
 
-
+//where we read the file and send message back to client
 void *reading(struct threadParams data){
   //have it read the file
   readFile(data.file, data.keyword);
+
   
-  //close the thread
-  return NULL;
+  pthread_exit(0);
 }
 
 
@@ -176,6 +176,8 @@ int main(void) {
       exit(1);
     }
 
+    //Read the folder passed in message
+    readFolder(message.dirpath, message.keyword);
     //create a child when a message is received
     x = fork();
     
@@ -195,10 +197,6 @@ int main(void) {
       wait(NULL); //wait for the child to complete
       printf("%s %s\n\n", message.keyword, message.dirpath);
     }
-    
-    
-    //Read the folder passed in message
-    readFolder(message.dirpath, message.keyword);
   }
 
   // if (msgctl(message_queue_id, IPC_RMID, NULL) == -1) {
