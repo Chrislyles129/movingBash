@@ -137,6 +137,7 @@ int main(void) {
   struct message_s message;
   int message_queue_id;
   key_t key;
+  pid_t x;
 
   pthread_t tid; //thread itendifier
   pthread_attr_t attr; //thread attributes
@@ -157,12 +158,24 @@ int main(void) {
   for(;;) {
 
     //Receive message from queue
+    //should fork when we get the message, and then in the child process, create the threads
     if (msgrcv(message_queue_id, &message, MAXKEYWORD + MAXDIRPATH, 0, 0) == -1) {
       perror("msgrcv");
       exit(1);
     }
+    //create a child when a message is received
+    x = fork();
     
-    printf("%s %s\n\n", message.keyword, message.dirpath);
+    //create the threads in the child for amount of files in directory
+    if(x == 0){ //child
+      
+    }
+    if(x > 0){ //this is the parent
+      printf("This is the parent process");
+      wait(NULL); //wait for the child to complete
+      printf("%s %s\n\n", message.keyword, message.dirpath);
+    }
+    
     
     //Read the folder passed in message
     readFolder(message.dirpath, message.keyword);
