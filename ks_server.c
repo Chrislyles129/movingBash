@@ -328,16 +328,19 @@ int main(void) {
     else if(x > 0){ //this is the parent
       // printf("This is the parent process\n");
       wait(NULL); //wait for the child to complete
-      break;
+      
     }
     //Child so read folder
     else{
       readFolder(message, x);
+      //Send reply to end client
+      endClient(message.pid);
+
+      break;
     }
 
 
-    //Send reply to end client
-    endClient(message.pid);
+
 
   }
   
