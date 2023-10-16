@@ -5,8 +5,11 @@
 #include <sys/types.h>
 #include <sys/ipc.h>
 #include <sys/msg.h>
+#include <sys/wait.h>
 #include <dirent.h>
 #include <pthread.h>
+#include <unistd.h>
+#include <sys/stat.h>
 
 //HELLO
 //client sends the keyword and directory path to the server
@@ -26,10 +29,95 @@ struct message_s {
   long type;
   char keyword[MAXKEYWORD];
   char dirpath[MAXDIRPATH];
+  pid_t pid;
 };
 
+//reply struct
+struct reply_s {
+  long type;
+  char reply[MAXOUTSIZE];
+  int end;
+};
+
+//thread params strct
+struct threadParams{
+  char *file;
+  char *keyword;
+  pid_t pid;
+};
+
+
+//End client process
+void endClient(pid_t pid){
+  // printf("END\n");
+  //initialize reply queue
+  struct reply_s reply;
+  int reply_queue_id;
+  key_t key_r;
+  reply.type = 1;
+
+  //Mark reply to end client process
+  reply.end = 1;  
+  
+  //USE PID as key
+  //generate key to send replies to client
+  if ((key_r = ftok("ks_client.c", pid)) == -1) {
+    perror("ftok");
+    exit(1);
+  }
+
+  //Use the key_r to enter reply queue
+  if ((reply_queue_id = msgget(key_r, 0644 | IPC_CREAT)) == -1) {
+    perror("msgget");
+    exit(1);
+  }  
+
+  //Send reply to end client
+  if(msgsnd(reply_queue_id, &reply, MAXOUTSIZE + sizeof(int), 0) == -1) {
+      perror("Error in msgsnd");
+  } 
+
+  return;
+}
+
+
+//Send reply to client
+void sendReply(char *output, pid_t pid){
+
+  //initialize reply queue
+  struct reply_s reply;
+  int reply_queue_id;
+  key_t key_r;
+  reply.type = 1;
+  reply.end = 0;
+
+  //USE PID as key
+  //generate key to send replies to client
+  if ((key_r = ftok("ks_client.c", pid)) == -1) {
+    perror("ftok");
+    exit(1);
+  }
+
+  //Use the key_r to enter reply queue
+  if ((reply_queue_id = msgget(key_r, 0644 | IPC_CREAT)) == -1) {
+    perror("msgget");
+    exit(1);
+  }  
+
+  //Line to send back
+  strcpy(reply.reply, output);
+
+  //Send reply to queue
+  if(msgsnd(reply_queue_id, &reply, MAXOUTSIZE, 0) == -1) {
+      perror("Error in msgsnd");
+  } 
+
+  return;
+}
+
+
 //READ FILES
-void readFile(char *File, char *keyword){
+void readFile(char *File, char *keyword, pid_t pid){
 
     //Read in file input
     FILE* ptr = fopen(File, "r");
@@ -41,13 +129,17 @@ void readFile(char *File, char *keyword){
 
     //Validate file
     if (ptr == NULL) {
-        printf("no such file.");
+        printf("no such file.\n");
         exit(1);
     }
 
     //variables to search through line  
     char *words = malloc(MAXLINESIZE);
     char *search = malloc(MAXLINESIZE);
+    char *saveptr;
+
+    //variable to store output
+    char *output = malloc(MAXOUTSIZE);
 
     //read line by line
     while ((read = getline(&line, &len, ptr)) != -1) {
@@ -55,91 +147,137 @@ void readFile(char *File, char *keyword){
 
         //tokenize a line (delimited by " ")
         strcpy(search, line);
-        words = strtok(search, " ");
+        words = strtok_r(search, " \t\n", &saveptr);
 
         //get next word token until none left
         while( words != NULL ) {
+
           //remove new lines
           words[strcspn(words, "\n")] = '\0';
 
           // printf("%s %d\n", words, strcmp(words, keyword));
           
-          //if word token matches keyword, print line
+          //if word token matches keyword, send line to client
           if(strcmp(words, keyword) == 0){
-              printf("%s:%s", keyword, line);
+              // printf("%s:%s", keyword, line);
               // printf("%s\n", line);
+
+              sprintf(output, "%s:%s", keyword, line);
+
+              //SEND REPLY
+              sendReply(output, pid);
+
               break;
           }
 
           //get next word token
-          words = strtok(NULL, " ");
-        }
-        
+          words = strtok_r(NULL, " ", &saveptr);
+        } 
     }
-    printf("\n");
+    // printf("\n");
 
     //close and free
     fclose(ptr);
     free(line);
 
+    return;
+
+}
+
+//where thread runs to read the file and send message back to client
+void *reading(void *param){
+  // printf("in the thread\n");
+  struct threadParams *data = param;
+
+  //have thread read the file
+  // printf("%s %s\n", data->file, data->keyword);
+  readFile(data->file, data->keyword, data->pid);
+
+  //exit thread
+  pthread_exit(0);
+}
+
+
+//make thread
+void makeThread(struct message_s message, char *File, pid_t x){
+  // printf("Parent THREAD pid = %d\n", getpid());
+  // printf("Child THREAD pid = %d\n", x);
+  // printf("%s\n", File);
+
+  //store thread parameters
+  struct threadParams parameters; 
+  pthread_t tid; //thread itendifier
+
+  //initialize the parameters
+  parameters.file = strdup(File);
+  parameters.keyword = strdup(message.keyword);
+  parameters.pid = message.pid;
+  // printf("%s\n", parameters.file);
+
+  //create a thread with the thread id, default attributes, do the reader routine, and with message contents
+  pthread_create(&tid, NULL, reading, &parameters); 
+  pthread_join(tid, NULL);
 
 }
 
 //READ DIRECTORY
-void readFolder(char *dirpath, char *keyword){
+void readFolder(struct message_s message, pid_t x){
   //directory entry 
   struct dirent *de;  
 
   //directory 
-  DIR *dir = opendir(dirpath); 
+  DIR *dir = opendir(message.dirpath); 
 
   //track viable files to open
   int count = 0;
 
   //Validate directory
   if (dir == NULL){
-      printf("Error opening directory" ); 
+      printf("Error opening directory\n" ); 
       return; 
   } 
 
-  
+  //Vars for file details
   char *File = malloc(MAXDIRPATH);
+  struct stat buffer;
 
   //readdir gets next directory entry
   while ((de = readdir(dir)) != NULL){
-    //Don't include parent paths
-    if (strcmp(de->d_name, ".") == 0 || strcmp(de->d_name, "..") == 0) {
-        continue;
+    
+    //Get full path and file details
+    sprintf(File, "%s%s", message.dirpath, de->d_name);
+    stat(File, &buffer);
+
+    //Don't include sub directories
+    if(S_ISREG(buffer.st_mode)) {
+
+      count++;
+      // printf("%s\n", de->d_name); 
+
+      //Read this file
+      // printf("%s\n", File);
+      // readFile(File, keyword);
+
+      //Make a thread for each file
+      makeThread(message, File, x);
+
     }
-    count++;
-    // printf("%s\n", de->d_name); 
-
-    //Get full file path
-    sprintf(File, "%s%s", dirpath, de->d_name);
-    printf("%s\n", File);
-    readFile(File, keyword);
-
+    
   }
   // printf("%d\n", count);
 
   //close and free
-  closedir(dir);     
+  closedir(dir);  
+  return;   
 } 
 
 
-
-//the routine that the threads will be running
-void *reader(void *param){
-
-}
-
 int main(void) {
+  //initialize message queue
   struct message_s message;
   int message_queue_id;
   key_t key;
-
-  pthread_t tid; //thread itendifier
-  pthread_attr_t attr; //thread attributes
+  pid_t x;
 
   //generate key to send messages between client and server
   if ((key = ftok("ks_server.c", 1)) == -1) {
@@ -157,23 +295,51 @@ int main(void) {
   for(;;) {
 
     //Receive message from queue
-    if (msgrcv(message_queue_id, &message, MAXKEYWORD + MAXDIRPATH, 0, 0) == -1) {
+    //should fork when we get the message, and then in the child process, create the threads
+    if (msgrcv(message_queue_id, &message, MAXKEYWORD + MAXDIRPATH + sizeof(pid_t), 0, 0) == -1) {
       perror("msgrcv");
       exit(1);
     }
     
-    printf("%s %s\n\n", message.keyword, message.dirpath);
+    //Exit if exit keyword
+    if(strcmp("exit", message.keyword) == 0){
+      //clear master message queue
+      if (msgctl(message_queue_id, IPC_RMID, NULL) == -1) {
+          perror("msgctl");
+          exit(1);
+      }
+      break;
+    }
+
+    // printf("%s %s\n\n", message.keyword, message.dirpath);
+
+    //create a child when a message is received
+    x = fork();
+
+    // printf("Parent pid = %d\n", getpid());
+    // printf("Child pid = %d\n", x);
     
-    //Read the folder passed in message
-    readFolder(message.dirpath, message.keyword);
+    //Determine parent or child process
+    if(x < 0){
+      perror("Fork error");
+      exit(1);
+    }
+    //Wait for child
+    else if(x > 0){ //this is the parent
+      // printf("This is the parent process\n");
+      wait(NULL); //wait for the child to complete
+      break;
+    }
+    //Child so read folder
+    else{
+      readFolder(message, x);
+    }
+
+
+    //Send reply to end client
+    endClient(message.pid);
+
   }
-
-  // if (msgctl(message_queue_id, IPC_RMID, NULL) == -1) {
-  //     perror("msgctl");
-  //     exit(1);
-  // }
-
-  pthread_create(&tid, &attr, reader, message.keyword); //create a thread with the thread id, default attributes, do the reader routine, and with message contents
-
+  
   return 0;
 }
