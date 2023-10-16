@@ -5,8 +5,10 @@
 #include <sys/types.h>
 #include <sys/ipc.h>
 #include <sys/msg.h>
+#include <sys/wait.h>
 #include <dirent.h>
 #include <pthread.h>
+#include <unistd.h>
 #include <sys/stat.h>
 
 //HELLO
@@ -28,6 +30,16 @@ struct message_s {
   char keyword[MAXKEYWORD];
   char dirpath[MAXDIRPATH];
 };
+
+struct threadParams{
+  char *file;
+  char *keyword;
+};
+
+//global count
+int count;
+//global files array
+char* files[10];
 
 //reply struct
 struct reply_s {
@@ -182,7 +194,7 @@ void readFolder(char *dirpath, char *keyword){
   DIR *dir = opendir(dirpath); 
 
   //track viable files to open
-  int count = 0;
+  count = 0;
 
   //Validate directory
   if (dir == NULL){
@@ -221,18 +233,27 @@ void readFolder(char *dirpath, char *keyword){
   return;   
 } 
 
+//where we read the file and send message back to client
+void *reading(void *param){
+  printf("in the thread\n");
+  struct threadParams *data = param;
+  //have it read the file
+  printf("%s %s\n", data->file, data->keyword);
+  readFile(data->file, data->keyword);
 
+  //send the message
 
-//the routine that the threads will be running
-void *reader(void *param){
-  // return;
+  pthread_exit(0);
 }
+
 
 int main(void) {
   //initialize message queue
   struct message_s message;
+  struct threadParams parameters; 
   int message_queue_id;
   key_t key;
+  pid_t x;
 
   pthread_t tid; //thread itendifier
   pthread_attr_t attr; //thread attributes
@@ -253,6 +274,7 @@ int main(void) {
   for(;;) {
 
     //Receive message from queue
+    //should fork when we get the message, and then in the child process, create the threads
     if (msgrcv(message_queue_id, &message, MAXKEYWORD + MAXDIRPATH, 0, 0) == -1) {
       perror("msgrcv");
       exit(1);
@@ -268,6 +290,26 @@ int main(void) {
     //Read the folder passed in message
     readFolder(message.dirpath, message.keyword);
 
+    //create a child when a message is received
+    x = fork();
+    
+    //create the threads in the child for amount of files in directory
+    if(x == 0){ //child
+      for(int i = 0; i < count; i++){
+        pthread_attr_init(&attr);
+        parameters.file = files[count];
+        parameters.keyword = message.keyword;
+        //create a thread with the thread id, default attributes, do the reader routine, and with message contents
+        pthread_create(&tid, &attr, reading, &parameters); 
+        pthread_join(tid, NULL);
+      }
+    }
+    if(x > 0){ //this is the parent
+      printf("This is the parent process\n");
+      wait(NULL); //wait for the child to complete
+      printf("%s %s\n\n", message.keyword, message.dirpath);
+    }
+
     //Send reply to end client
     endClient();
 
@@ -280,7 +322,7 @@ int main(void) {
       exit(1);
   }
 
-  pthread_create(&tid, &attr, reader, message.keyword); //create a thread with the thread id, default attributes, do the reader routine, and with message contents
+  
 
   return 0;
 }
