@@ -5,8 +5,10 @@
 #include <sys/types.h>
 #include <sys/ipc.h>
 #include <sys/msg.h>
+#include <sys/wait.h>
 #include <dirent.h>
 #include <pthread.h>
+#include <unistd.h>
 
 //HELLO
 //client sends the keyword and directory path to the server
@@ -29,14 +31,14 @@ struct message_s {
 };
 
 struct threadParams{
-  FILE* file;
+  char *file;
   char *keyword;
 };
 
 //global count
 int count;
-//global files array to use as a queue
-FILE *files[];
+//global files array
+char* files[10];
 
 //READ FILES
 void readFile(char *File, char *keyword){
@@ -135,11 +137,14 @@ void readFolder(char *dirpath, char *keyword){
 } 
 
 //where we read the file and send message back to client
-void *reading(struct threadParams data){
+void *reading(void *param){
+  printf("in the thread\n");
+  struct threadParams *data = param;
   //have it read the file
-  readFile(data.file, data.keyword);
+  readFile(data->file, data->keyword);
 
-  
+  //send the message
+
   pthread_exit(0);
 }
 
@@ -178,6 +183,7 @@ int main(void) {
 
     //Read the folder passed in message
     readFolder(message.dirpath, message.keyword);
+
     //create a child when a message is received
     x = fork();
     

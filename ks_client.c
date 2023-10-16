@@ -49,7 +49,7 @@ int main(int argc, char *argv[]) {
     strcpy(message.keyword, keyword);
     strcpy(message.dirpath, dirpath);
 
-    // printf("%s", message.content);
+    //printf("%s %s\n", message.keyword, message.dirpath);
 
     //Send message to queue
     if(msgsnd(message_queue_id, &message, MAXKEYWORD + MAXDIRPATH, 0) == -1) {
