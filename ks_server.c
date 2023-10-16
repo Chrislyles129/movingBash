@@ -136,6 +136,7 @@ void readFile(char *File, char *keyword, pid_t pid){
     //variables to search through line  
     char *words = malloc(MAXLINESIZE);
     char *search = malloc(MAXLINESIZE);
+    char *saveptr;
 
     //variable to store output
     char *output = malloc(MAXOUTSIZE);
@@ -146,7 +147,7 @@ void readFile(char *File, char *keyword, pid_t pid){
 
         //tokenize a line (delimited by " ")
         strcpy(search, line);
-        words = strtok(search, " ");
+        words = strtok_r(search, " \t\n", &saveptr);
 
         //get next word token until none left
         while( words != NULL ) {
@@ -170,10 +171,10 @@ void readFile(char *File, char *keyword, pid_t pid){
           }
 
           //get next word token
-          words = strtok(NULL, " ");
+          words = strtok_r(NULL, " ", &saveptr);
         } 
     }
-    printf("\n");
+    // printf("\n");
 
     //close and free
     fclose(ptr);
@@ -189,7 +190,7 @@ void *reading(void *param){
   struct threadParams *data = param;
 
   //have thread read the file
-  printf("%s %s\n", data->file, data->keyword);
+  // printf("%s %s\n", data->file, data->keyword);
   readFile(data->file, data->keyword, data->pid);
 
   //exit thread
