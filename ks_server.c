@@ -141,6 +141,7 @@ void *reading(void *param){
   printf("in the thread\n");
   struct threadParams *data = param;
   //have it read the file
+  printf("%s %s\n", data->file, data->keyword);
   readFile(data->file, data->keyword);
 
   //send the message
@@ -199,7 +200,7 @@ int main(void) {
       }
     }
     if(x > 0){ //this is the parent
-      printf("This is the parent process");
+      printf("This is the parent process\n");
       wait(NULL); //wait for the child to complete
       printf("%s %s\n\n", message.keyword, message.dirpath);
     }
