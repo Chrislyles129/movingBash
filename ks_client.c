@@ -5,6 +5,7 @@
 #include <sys/types.h>
 #include <sys/ipc.h>
 #include <sys/msg.h>
+#include <unistd.h>
 
 #define MAXDIRPATH 1024
 #define MAXKEYWORD 256
@@ -16,6 +17,7 @@ struct message_s {
   long type;
   char keyword[MAXKEYWORD];
   char dirpath[MAXDIRPATH];
+  pid_t pid;
 };
 
 //reply struct
@@ -40,6 +42,8 @@ int main(int argc, char *argv[]) {
     key_t key;
 
 
+    message.pid = getpid();
+
     //create reply queue
     struct reply_s reply;
     int reply_queue_id;
@@ -58,9 +62,9 @@ int main(int argc, char *argv[]) {
         exit(1);
     }
 
-    //USE PID AS KEY INSTEAD
+    //USE PID AS KEY
     //generate key to send replies back to client
-    if ((key_r = ftok("ks_client.c", 1)) == -1) {
+    if ((key_r = ftok("ks_client.c", message.pid)) == -1) {
         perror("ftok");
         exit(1);
     }
@@ -77,10 +81,10 @@ int main(int argc, char *argv[]) {
     strcpy(message.keyword, keyword);
     strcpy(message.dirpath, dirpath);
 
-    //printf("%s %s\n", message.keyword, message.dirpath);
+    // printf("%s", message.content);
 
     //Send message to queue
-    if(msgsnd(message_queue_id, &message, MAXKEYWORD + MAXDIRPATH, 0) == -1) {
+    if(msgsnd(message_queue_id, &message, MAXKEYWORD + MAXDIRPATH + sizeof(pid_t), 0) == -1) {
         perror("Error in msgsnd");
     }    
 
