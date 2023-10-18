@@ -52,6 +52,7 @@ void endClient(pid_t pid){
   // printf("END\n");
   //initialize reply queue
   struct reply_s reply;
+  memset(&reply, 0, sizeof(struct reply_s));
   int reply_queue_id;
   key_t key_r;
   reply.type = 1;
@@ -86,6 +87,7 @@ void sendReply(char *output, pid_t pid){
 
   //initialize reply queue
   struct reply_s reply;
+  memset(&reply, 0, sizeof(struct reply_s));
   int reply_queue_id;
   key_t key_r;
   reply.type = 1;
@@ -108,11 +110,11 @@ void sendReply(char *output, pid_t pid){
   strcpy(reply.reply, output);
 
   //Send reply to queue
-  if(msgsnd(reply_queue_id, &reply, MAXOUTSIZE, 0) == -1) {
+  if(msgsnd(reply_queue_id, &reply, MAXOUTSIZE + sizeof(int), 0) == -1) {
       perror("Error in msgsnd");
   } 
 
-  return;
+  // return;
 }
 
 
@@ -123,8 +125,8 @@ void readFile(char *File, char *keyword, pid_t pid){
     FILE* ptr = fopen(File, "r");
 
     //Variables to read line by line
-    char *line = malloc(MAXLINESIZE);
-    size_t len = 0;
+    char *line = NULL;
+    size_t len = MAXLINESIZE;
     ssize_t read;
 
     //Validate file
@@ -134,7 +136,7 @@ void readFile(char *File, char *keyword, pid_t pid){
     }
 
     //variables to search through line  
-    char *words = malloc(MAXLINESIZE);
+    char *words = NULL;
     char *search = malloc(MAXLINESIZE);
     char *saveptr;
 
@@ -179,6 +181,9 @@ void readFile(char *File, char *keyword, pid_t pid){
     //close and free
     fclose(ptr);
     free(line);
+    free(search);
+    free(words);
+    free(output);
 
     return;
 
@@ -217,6 +222,9 @@ void makeThread(struct message_s message, char *File, pid_t x){
   //create a thread with the thread id, default attributes, do the reader routine, and with message contents
   pthread_create(&tid, NULL, reading, &parameters); 
   pthread_join(tid, NULL);
+
+  free(parameters.keyword);
+  free(parameters.file);
 
 }
 
@@ -268,6 +276,7 @@ void readFolder(struct message_s message, pid_t x){
 
   //close and free
   closedir(dir);  
+  free(File);
   return;   
 } 
 
@@ -308,6 +317,7 @@ int main(void) {
           perror("msgctl");
           exit(1);
       }
+
       break;
     }
 
