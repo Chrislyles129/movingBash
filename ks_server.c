@@ -182,7 +182,7 @@ void readFile(char *File, char *keyword, pid_t pid){
     fclose(ptr);
     free(line);
     free(search);
-    free(words);
+    // free(words);
     free(output);
 
     return;
