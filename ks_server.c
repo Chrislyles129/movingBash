@@ -202,16 +202,10 @@ void *reading(void *param){
   pthread_exit(0);
 }
 
-
-//make thread
-void makeThread(struct message_s message, char *File, pid_t x){
-  // printf("Parent THREAD pid = %d\n", getpid());
-  // printf("Child THREAD pid = %d\n", x);
-  // printf("%s\n", File);
-
+struct threadParams makeStruct(struct message_s message, char *File, pid_t x){
   //store thread parameters
   struct threadParams parameters; 
-  pthread_t tid; //thread itendifier
+  // pthread_t tid; //thread itendifier
 
   //initialize the parameters
   parameters.file = strdup(File);
@@ -219,14 +213,34 @@ void makeThread(struct message_s message, char *File, pid_t x){
   parameters.pid = message.pid;
   // printf("%s\n", parameters.file);
 
-  //create a thread with the thread id, default attributes, do the reader routine, and with message contents
-  pthread_create(&tid, NULL, reading, &parameters); 
-  pthread_join(tid, NULL);
-
-  free(parameters.keyword);
-  free(parameters.file);
+  return parameters;
 
 }
+
+// //make thread
+// void makeThread(struct message_s message, char *File, pid_t x){
+//   // printf("Parent THREAD pid = %d\n", getpid());
+//   // printf("Child THREAD pid = %d\n", x);
+//   // printf("%s\n", File);
+
+//   // store thread parameters
+//   struct threadParams parameters; 
+//   pthread_t tid; //thread itendifier
+
+//   //initialize the parameters
+//   parameters.file = strdup(File);
+//   parameters.keyword = strdup(message.keyword);
+//   parameters.pid = message.pid;
+//   // printf("%s\n", parameters.file);
+
+//   //create a thread with the thread id, default attributes, do the reader routine, and with message contents
+//   pthread_create(&tid, NULL, reading, &parameters); 
+//   pthread_join(tid, NULL);
+
+//   free(parameters.keyword);
+//   free(parameters.file);
+
+// }
 
 //READ DIRECTORY
 void readFolder(struct message_s message, pid_t x){
@@ -249,6 +263,11 @@ void readFolder(struct message_s message, pid_t x){
   char *File = malloc(MAXDIRPATH);
   struct stat buffer;
 
+
+  //Store all file information and created threads
+  struct threadParams params[64];
+  pthread_t workers[64];
+
   //readdir gets next directory entry
   while ((de = readdir(dir)) != NULL){
     
@@ -259,7 +278,6 @@ void readFolder(struct message_s message, pid_t x){
     //Don't include sub directories
     if(S_ISREG(buffer.st_mode)) {
 
-      count++;
       // printf("%s\n", de->d_name); 
 
       //Read this file
@@ -267,16 +285,32 @@ void readFolder(struct message_s message, pid_t x){
       // readFile(File, keyword);
 
       //Make a thread for each file
-      makeThread(message, File, x);
 
+      params[count] = makeStruct(message, File, x);
+      pthread_create(&workers[count], NULL, reading, &params[count]); 
+
+      count++;
     }
     
   }
   // printf("%d\n", count);
 
+
+  //run threads
+  for(int i = 0; i < count; i++){
+    pthread_join(workers[i], NULL);
+  }
+
+
   //close and free
   closedir(dir);  
   free(File);
+  
+  for(int i = 0; i < count; i++){
+    free(params[i].keyword);
+    free(params[i].file);
+  }
+
   return;   
 } 
 
