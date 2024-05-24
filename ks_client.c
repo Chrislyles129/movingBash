@@ -38,6 +38,7 @@ int main(int argc, char *argv[]) {
 
     //create message queue
     struct message_s message;
+    memset(&message, 0, sizeof(struct message_s));
     int message_queue_id;
     key_t key;
 

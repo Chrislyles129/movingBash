@@ -52,6 +52,7 @@ void endClient(pid_t pid){
   // printf("END\n");
   //initialize reply queue
   struct reply_s reply;
+  memset(&reply, 0, sizeof(struct reply_s));
   int reply_queue_id;
   key_t key_r;
   reply.type = 1;
@@ -86,6 +87,7 @@ void sendReply(char *output, pid_t pid){
 
   //initialize reply queue
   struct reply_s reply;
+  memset(&reply, 0, sizeof(struct reply_s));
   int reply_queue_id;
   key_t key_r;
   reply.type = 1;
@@ -108,11 +110,11 @@ void sendReply(char *output, pid_t pid){
   strcpy(reply.reply, output);
 
   //Send reply to queue
-  if(msgsnd(reply_queue_id, &reply, MAXOUTSIZE, 0) == -1) {
+  if(msgsnd(reply_queue_id, &reply, MAXOUTSIZE + sizeof(int), 0) == -1) {
       perror("Error in msgsnd");
   } 
 
-  return;
+  // return;
 }
 
 
@@ -123,8 +125,8 @@ void readFile(char *File, char *keyword, pid_t pid){
     FILE* ptr = fopen(File, "r");
 
     //Variables to read line by line
-    char *line = malloc(MAXLINESIZE);
-    size_t len = 0;
+    char *line = NULL;
+    size_t len = MAXLINESIZE;
     ssize_t read;
 
     //Validate file
@@ -134,7 +136,7 @@ void readFile(char *File, char *keyword, pid_t pid){
     }
 
     //variables to search through line  
-    char *words = malloc(MAXLINESIZE);
+    char *words = NULL;
     char *search = malloc(MAXLINESIZE);
     char *saveptr;
 
@@ -179,6 +181,9 @@ void readFile(char *File, char *keyword, pid_t pid){
     //close and free
     fclose(ptr);
     free(line);
+    free(search);
+    // free(words);
+    free(output);
 
     return;
 
@@ -197,16 +202,10 @@ void *reading(void *param){
   pthread_exit(0);
 }
 
-
-//make thread
-void makeThread(struct message_s message, char *File, pid_t x){
-  // printf("Parent THREAD pid = %d\n", getpid());
-  // printf("Child THREAD pid = %d\n", x);
-  // printf("%s\n", File);
-
+struct threadParams makeStruct(struct message_s message, char *File, pid_t x){
   //store thread parameters
   struct threadParams parameters; 
-  pthread_t tid; //thread itendifier
+  // pthread_t tid; //thread itendifier
 
   //initialize the parameters
   parameters.file = strdup(File);
@@ -214,11 +213,34 @@ void makeThread(struct message_s message, char *File, pid_t x){
   parameters.pid = message.pid;
   // printf("%s\n", parameters.file);
 
-  //create a thread with the thread id, default attributes, do the reader routine, and with message contents
-  pthread_create(&tid, NULL, reading, &parameters); 
-  pthread_join(tid, NULL);
+  return parameters;
 
 }
+
+// //make thread
+// void makeThread(struct message_s message, char *File, pid_t x){
+//   // printf("Parent THREAD pid = %d\n", getpid());
+//   // printf("Child THREAD pid = %d\n", x);
+//   // printf("%s\n", File);
+
+//   // store thread parameters
+//   struct threadParams parameters; 
+//   pthread_t tid; //thread itendifier
+
+//   //initialize the parameters
+//   parameters.file = strdup(File);
+//   parameters.keyword = strdup(message.keyword);
+//   parameters.pid = message.pid;
+//   // printf("%s\n", parameters.file);
+
+//   //create a thread with the thread id, default attributes, do the reader routine, and with message contents
+//   pthread_create(&tid, NULL, reading, &parameters); 
+//   pthread_join(tid, NULL);
+
+//   free(parameters.keyword);
+//   free(parameters.file);
+
+// }
 
 //READ DIRECTORY
 void readFolder(struct message_s message, pid_t x){
@@ -241,6 +263,11 @@ void readFolder(struct message_s message, pid_t x){
   char *File = malloc(MAXDIRPATH);
   struct stat buffer;
 
+
+  //Store all file information and created threads
+  struct threadParams params[64];
+  pthread_t workers[64];
+
   //readdir gets next directory entry
   while ((de = readdir(dir)) != NULL){
     
@@ -251,7 +278,6 @@ void readFolder(struct message_s message, pid_t x){
     //Don't include sub directories
     if(S_ISREG(buffer.st_mode)) {
 
-      count++;
       // printf("%s\n", de->d_name); 
 
       //Read this file
@@ -259,15 +285,32 @@ void readFolder(struct message_s message, pid_t x){
       // readFile(File, keyword);
 
       //Make a thread for each file
-      makeThread(message, File, x);
 
+      params[count] = makeStruct(message, File, x);
+      pthread_create(&workers[count], NULL, reading, &params[count]); 
+
+      count++;
     }
     
   }
   // printf("%d\n", count);
 
+
+  //run threads
+  for(int i = 0; i < count; i++){
+    pthread_join(workers[i], NULL);
+  }
+
+
   //close and free
   closedir(dir);  
+  free(File);
+  
+  for(int i = 0; i < count; i++){
+    free(params[i].keyword);
+    free(params[i].file);
+  }
+
   return;   
 } 
 
@@ -308,6 +351,7 @@ int main(void) {
           perror("msgctl");
           exit(1);
       }
+
       break;
     }
 
@@ -328,16 +372,19 @@ int main(void) {
     else if(x > 0){ //this is the parent
       // printf("This is the parent process\n");
       wait(NULL); //wait for the child to complete
-      break;
+      
     }
     //Child so read folder
     else{
       readFolder(message, x);
+      //Send reply to end client
+      endClient(message.pid);
+
+      break;
     }
 
 
-    //Send reply to end client
-    endClient(message.pid);
+
 
   }
   
